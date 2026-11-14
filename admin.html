@@ -1,0 +1,714 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>网站编辑器 · Admin</title>
+<style>
+  :root {
+    --primary: #4f6ef7;
+    --bg: #f7f8fc;
+    --card: #ffffff;
+    --text: #1f2430;
+    --text-soft: #6b7280;
+    --border: #e5e7eb;
+    --danger: #ef4444;
+    --radius: 12px;
+    --shadow: 0 4px 16px rgba(31, 36, 48, .06);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: "PingFang SC", "Microsoft YaHei", -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg); color: var(--text); line-height: 1.6;
+  }
+  header {
+    background: #fff; border-bottom: 1px solid var(--border);
+    padding: 14px 24px; display: flex; align-items: center; justify-content: space-between;
+    position: sticky; top: 0; z-index: 50;
+  }
+  header h1 { font-size: 17px; }
+  header .hint { font-size: 13px; color: var(--text-soft); }
+  .toolbar { display: flex; gap: 10px; flex-wrap: wrap; }
+  .btn {
+    padding: 8px 16px; border-radius: 8px; border: none; cursor: pointer;
+    font-size: 14px; font-weight: 500; transition: all .15s;
+  }
+  .btn-primary { background: var(--primary); color: #fff; }
+  .btn-primary:hover { filter: brightness(.92); }
+  .btn-ghost { background: #fff; border: 1px solid var(--border); color: var(--text); }
+  .btn-ghost:hover { border-color: var(--primary); color: var(--primary); }
+  .btn-danger { background: none; color: var(--danger); border: 1px solid transparent; padding: 4px 8px; font-size: 13px; }
+  .btn-danger:hover { border-color: var(--danger); }
+  .btn-sm { padding: 4px 12px; font-size: 13px; }
+
+  .layout { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; padding: 20px 24px; max-width: 1500px; margin: 0 auto; }
+  @media (max-width: 980px) { .layout { grid-template-columns: 1fr; } }
+
+  .card {
+    background: var(--card); border-radius: var(--radius);
+    padding: 20px 22px; box-shadow: var(--shadow); margin-bottom: 18px;
+  }
+  .card h2 { font-size: 16px; margin-bottom: 14px; display: flex; align-items: center; justify-content: space-between; }
+  .field { margin-bottom: 12px; }
+  .field label { display: block; font-size: 13px; color: var(--text-soft); margin-bottom: 4px; }
+  .field input[type="text"], .field input[type="url"], .field textarea {
+    width: 100%; padding: 8px 12px; border: 1px solid var(--border);
+    border-radius: 8px; font-size: 14px; font-family: inherit; background: #fafbfc;
+    outline: none; transition: border-color .15s;
+  }
+  .field textarea { resize: vertical; min-height: 110px; }
+  .field input:focus, .field textarea:focus { border-color: var(--primary); background: #fff; }
+  .row { display: flex; gap: 10px; }
+  .row > * { flex: 1; }
+
+  .item-row {
+    border: 1px solid var(--border); border-radius: 10px;
+    padding: 14px; margin-bottom: 12px; background: #fafbfc;
+  }
+  .item-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; font-size: 13px; color: var(--text-soft); }
+  .level-val { font-size: 13px; color: var(--primary); font-weight: 600; }
+
+  #preview {
+    width: 100%; height: calc(100vh - 110px);
+    border: 1px solid var(--border); border-radius: var(--radius);
+    background: #fff; box-shadow: var(--shadow);
+  }
+  .preview-wrap { position: sticky; top: 76px; }
+  .preview-label { font-size: 13px; color: var(--text-soft); margin-bottom: 8px; }
+
+  dialog {
+    border: none; border-radius: 14px; padding: 24px; max-width: 480px; width: 90%;
+    box-shadow: 0 20px 60px rgba(0,0,0,.2);
+  }
+  dialog::backdrop { background: rgba(0,0,0,.35); }
+  dialog textarea { width: 100%; min-height: 180px; padding: 10px; border: 1px solid var(--border); border-radius: 8px; font-family: monospace; font-size: 13px; }
+  dialog .dlg-actions { margin-top: 14px; display: flex; gap: 10px; justify-content: flex-end; }
+
+  .toast {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+    background: #1f2430; color: #fff; padding: 10px 20px; border-radius: 10px;
+    font-size: 14px; opacity: 0; pointer-events: none; transition: opacity .3s; z-index: 200;
+  }
+  .toast.show { opacity: .95; }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>🎨 个人网站编辑器</h1>
+    <div class="hint">编辑左边内容 → 右侧实时预览 → 「导出 index.html」替换仓库文件 → git push 更新线上</div>
+  </div>
+  <div class="toolbar">
+    <button class="btn btn-ghost" id="btn-import">导入 JSON</button>
+    <button class="btn btn-ghost" id="btn-copy">复制 JSON</button>
+    <button class="btn btn-ghost" id="btn-reset">重置</button>
+    <button class="btn btn-primary" id="btn-export">⬇ 导出 index.html</button>
+  </div>
+</header>
+
+<div class="layout">
+  <!-- ============ 左侧编辑区 ============ -->
+  <div id="editor">
+
+    <div class="card">
+      <h2>基本信息</h2>
+      <div class="row">
+        <div class="field"><label>姓名</label><input type="text" id="f-name"></div>
+        <div class="field"><label>头像文字（无图片时显示）</label><input type="text" id="f-avatarText"></div>
+      </div>
+      <div class="field"><label>头像图片地址（可选，填了会覆盖文字头像）</label><input type="text" id="f-avatarUrl" placeholder="https://... 或 仓库内 avatar.jpg"></div>
+      <div class="field"><label>背景图片地址（可选，覆盖 Hero 区背景）</label><input type="text" id="f-heroBgUrl" placeholder="https://... 或 仓库内 bg.jpg"></div>
+      <div class="field"><label>职位 / 身份</label><input type="text" id="f-role"></div>
+      <div class="field"><label>一句话介绍</label><input type="text" id="f-tagline"></div>
+      <div class="field"><label>关于我（支持换行）</label><textarea id="f-about"></textarea></div>
+      <div class="field"><label>页脚文字</label><input type="text" id="f-footerText"></div>
+    </div>
+
+    <div class="card">
+      <h2>技能 <button class="btn btn-ghost btn-sm" id="add-skill">+ 添加</button></h2>
+      <div id="skills-list"></div>
+    </div>
+
+    <div class="card">
+      <h2>项目作品 <button class="btn btn-ghost btn-sm" id="add-project">+ 添加</button></h2>
+      <div id="projects-list"></div>
+    </div>
+
+    <div class="card">
+      <h2>联系方式 <button class="btn btn-ghost btn-sm" id="add-contact">+ 添加</button></h2>
+      <div id="contacts-list"></div>
+    </div>
+
+  </div>
+
+  <!-- ============ 右侧预览 ============ -->
+  <div class="preview-wrap">
+    <div class="preview-label">实时预览（移动窗口可拖小查看响应式效果）</div>
+    <iframe id="preview" title="预览"></iframe>
+  </div>
+</div>
+
+<dialog id="dlg">
+  <h2 id="dlg-title" style="font-size:16px;margin-bottom:12px;">JSON 数据</h2>
+  <textarea id="dlg-text" spellcheck="false"></textarea>
+  <div class="dlg-actions">
+    <button class="btn btn-ghost" id="dlg-close">关闭</button>
+    <button class="btn btn-primary" id="dlg-apply">应用</button>
+  </div>
+</dialog>
+
+<div class="toast" id="toast"></div>
+
+<!-- ============ 主页模板（导出时使用，勿改） ============ -->
+<textarea id="tpl" style="display:none" spellcheck="false"><!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>张三 · 个人主页</title>
+<meta name="description" content="个人主页 · 作品与项目展示">
+<style>
+  :root {
+    --primary: #4f6ef7;
+    --primary-dark: #3a55d9;
+    --bg: #f7f8fc;
+    --card: #ffffff;
+    --text: #1f2430;
+    --text-soft: #6b7280;
+    --border: #e5e7eb;
+    --radius: 14px;
+    --shadow: 0 4px 20px rgba(31, 36, 48, .06);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: "PingFang SC", "Microsoft YaHei", -apple-system, "Segoe UI", sans-serif;
+    background:
+      radial-gradient(ellipse 900px 520px at 88% -120px, rgba(240,171,252,.20), transparent 70%),
+      radial-gradient(ellipse 820px 480px at -5% 260px, rgba(129,140,248,.16), transparent 70%),
+      linear-gradient(180deg, #eef1fe 0%, #f7f8fc 640px);
+    background-attachment: fixed;
+    color: var(--text);
+    line-height: 1.7;
+  }
+  a { color: inherit; text-decoration: none; }
+  .container { max-width: 960px; margin: 0 auto; padding: 0 24px; }
+
+  /* ===== 顶部导航 ===== */
+  nav {
+    position: sticky; top: 0; z-index: 100;
+    background: rgba(255,255,255,.85);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--border);
+  }
+  nav .container { display: flex; align-items: center; justify-content: space-between; height: 60px; }
+  .nav-logo { font-weight: 700; font-size: 18px; color: var(--primary); }
+  .nav-links { display: flex; gap: 24px; font-size: 15px; }
+  .nav-links a { color: var(--text-soft); transition: color .2s; }
+  .nav-links a:hover { color: var(--primary); }
+
+  /* ===== Hero ===== */
+  .hero {
+    position: relative; overflow: hidden;
+    padding: 80px 0 60px; text-align: center;
+    background-image: radial-gradient(circle, rgba(79,110,247,.10) 1px, transparent 1px);
+    background-size: 22px 22px;
+  }
+  .hero::before, .hero::after {
+    content: ""; position: absolute; border-radius: 50%;
+    filter: blur(80px); opacity: .5; pointer-events: none;
+  }
+  .hero::before { width: 420px; height: 420px; background: #a5b4fc; top: -140px; left: -120px; }
+  .hero::after  { width: 460px; height: 460px; background: #f0abfc; bottom: -200px; right: -140px; }
+  .hero .container { position: relative; z-index: 1; }
+  .avatar {
+    width: 120px; height: 120px; border-radius: 50%;
+    object-fit: cover; border: 4px solid #fff;
+    box-shadow: var(--shadow);
+    background: linear-gradient(135deg, var(--primary), #8b9cff);
+    display: inline-flex; align-items: center; justify-content: center;
+    color: #fff; font-size: 44px; font-weight: 700;
+  }
+  .hero h1 { font-size: 36px; margin-top: 20px; }
+  .hero .role {
+    display: inline-block; margin-top: 10px; padding: 4px 16px;
+    background: rgba(79,110,247,.1); color: var(--primary);
+    border-radius: 999px; font-size: 15px; font-weight: 500;
+  }
+  .hero .tagline { margin: 16px auto 0; max-width: 560px; color: var(--text-soft); font-size: 16px; }
+  .hero-actions { margin-top: 28px; display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
+  .btn {
+    padding: 10px 24px; border-radius: 10px; font-size: 15px; font-weight: 500;
+    cursor: pointer; border: none; transition: all .2s;
+  }
+  .btn-primary { background: var(--primary); color: #fff; }
+  .btn-primary:hover { background: var(--primary-dark); transform: translateY(-1px); }
+  .btn-ghost { background: #fff; color: var(--text); border: 1px solid var(--border); }
+  .btn-ghost:hover { border-color: var(--primary); color: var(--primary); }
+
+  /* ===== 通用 section ===== */
+  section { padding: 50px 0; }
+  .section-title { font-size: 24px; margin-bottom: 24px; display: flex; align-items: center; gap: 10px; }
+  .section-title::before { content: ""; width: 6px; height: 24px; border-radius: 3px; background: var(--primary); }
+
+  /* ===== 关于我 ===== */
+  .about-card {
+    background: var(--card); border-radius: var(--radius);
+    padding: 28px 32px; box-shadow: var(--shadow);
+    color: var(--text-soft); font-size: 16px; white-space: pre-wrap;
+  }
+
+  /* ===== 技能 ===== */
+  .skills-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 14px; }
+  .skill-item {
+    background: var(--card); border-radius: 12px; padding: 16px;
+    box-shadow: var(--shadow); text-align: center;
+    transition: transform .2s;
+  }
+  .skill-item:hover { transform: translateY(-3px); }
+  .skill-name { font-weight: 600; font-size: 15px; }
+  .skill-bar { margin-top: 10px; height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
+  .skill-bar-fill { height: 100%; background: linear-gradient(90deg, var(--primary), #8b9cff); border-radius: 3px; }
+  .skill-level { margin-top: 6px; font-size: 12px; color: var(--text-soft); }
+
+  /* ===== 项目 ===== */
+  .projects-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px; }
+  .project-card {
+    background: var(--card); border-radius: var(--radius);
+    padding: 24px; box-shadow: var(--shadow);
+    display: flex; flex-direction: column; gap: 10px;
+    transition: transform .2s, box-shadow .2s;
+  }
+  .project-card:hover { transform: translateY(-4px); box-shadow: 0 8px 28px rgba(31,36,48,.1); }
+  .project-title { font-size: 18px; font-weight: 700; }
+  .project-desc { color: var(--text-soft); font-size: 14px; flex: 1; }
+  .project-tags { display: flex; flex-wrap: wrap; gap: 8px; }
+  .tag {
+    font-size: 12px; padding: 2px 10px; border-radius: 999px;
+    background: rgba(79,110,247,.08); color: var(--primary);
+  }
+  .project-link { font-size: 14px; color: var(--primary); font-weight: 500; }
+  .project-link:hover { text-decoration: underline; }
+
+  /* ===== 联系 ===== */
+  .contact-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 16px; }
+  .contact-item {
+    background: var(--card); border-radius: 12px; padding: 18px 20px;
+    box-shadow: var(--shadow); display: flex; align-items: center; gap: 12px;
+    transition: transform .2s;
+  }
+  .contact-item:hover { transform: translateY(-3px); }
+  .contact-icon { font-size: 22px; }
+  .contact-label { font-size: 12px; color: var(--text-soft); }
+  .contact-value { font-size: 14px; font-weight: 500; word-break: break-all; }
+
+  footer {
+    border-top: 1px solid var(--border); padding: 28px 0;
+    text-align: center; color: var(--text-soft); font-size: 14px;
+  }
+
+  @media (max-width: 640px) {
+    .nav-links { display: none; }
+    .hero h1 { font-size: 28px; }
+    .hero { padding: 56px 0 40px; }
+  }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="container">
+    <div class="nav-logo" id="nav-logo">张三</div>
+    <div class="nav-links">
+      <a href="#about">关于</a>
+      <a href="#skills">技能</a>
+      <a href="#projects">项目</a>
+      <a href="#contact">联系</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="container">
+    <div class="avatar" id="avatar">张</div>
+    <h1 id="name">张三</h1>
+    <div class="role" id="role">前端工程师</div>
+    <p class="tagline" id="tagline">热爱构建美好的网页与产品，欢迎了解我的作品。</p>
+    <div class="hero-actions" id="hero-actions"></div>
+  </div>
+</header>
+
+<main>
+  <section id="about">
+    <div class="container">
+      <h2 class="section-title">关于我</h2>
+      <div class="about-card" id="about-text"></div>
+    </div>
+  </section>
+
+  <section id="skills">
+    <div class="container">
+      <h2 class="section-title">技能</h2>
+      <div class="skills-grid" id="skills-grid"></div>
+    </div>
+  </section>
+
+  <section id="projects">
+    <div class="container">
+      <h2 class="section-title">项目作品</h2>
+      <div class="projects-grid" id="projects-grid"></div>
+    </div>
+  </section>
+
+  <section id="contact">
+    <div class="container">
+      <h2 class="section-title">联系我</h2>
+      <div class="contact-grid" id="contact-grid"></div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="container" id="footer-text">© 2026 张三 · 用 ❤️ 与代码构建</div>
+</footer>
+
+<!-- ===== 站点数据（在 admin.html 中可视化编辑后替换此块即可） ===== -->
+<script type="application/json" id="site-data">__SITE_DATA_JSON__
+</script>
+
+<script>
+(function () {
+  var data = JSON.parse(document.getElementById('site-data').textContent);
+
+  // 基础信息
+  document.title = data.name + ' · 个人主页';
+  document.getElementById('nav-logo').textContent = data.name;
+  document.getElementById('name').textContent = data.name;
+  document.getElementById('role').textContent = data.role || '';
+  document.getElementById('tagline').textContent = data.tagline || '';
+  document.getElementById('footer-text').textContent = data.footerText || ('© ' + new Date().getFullYear() + ' ' + data.name);
+
+  // 头像
+  var avatarEl = document.getElementById('avatar');
+  if (data.avatarUrl) {
+    var img = document.createElement('img');
+    img.src = data.avatarUrl;
+    img.alt = data.name;
+    img.className = 'avatar';
+    img.style.width = '120px'; img.style.height = '120px';
+    avatarEl.replaceWith(img);
+  } else {
+    avatarEl.textContent = data.avatarText || (data.name || '?').charAt(0);
+  }
+
+  // 背景图片（可选，覆盖 Hero 区默认背景）
+  if (data.heroBgUrl) {
+    var hero = document.querySelector('.hero');
+    hero.style.backgroundImage = 'linear-gradient(rgba(247,248,252,.82), rgba(247,248,252,.82)), url("' + data.heroBgUrl + '")';
+    hero.style.backgroundSize = 'cover';
+    hero.style.backgroundPosition = 'center';
+  }
+
+  // Hero 按钮
+  var actions = document.getElementById('hero-actions');
+  var primaryContact = (data.contacts || [])[0];
+  if (primaryContact && primaryContact.link) {
+    var a = document.createElement('a');
+    a.className = 'btn btn-primary';
+    a.href = primaryContact.link;
+    a.textContent = '联系我';
+    actions.appendChild(a);
+  }
+  var gh = (data.contacts || []).filter(function (c) { return /github/i.test(c.label); })[0];
+  if (gh && gh.link) {
+    var b = document.createElement('a');
+    b.className = 'btn btn-ghost';
+    b.href = gh.link;
+    b.target = '_blank';
+    b.rel = 'noopener';
+    b.textContent = 'GitHub';
+    actions.appendChild(b);
+  }
+
+  // 关于我
+  document.getElementById('about-text').textContent = data.about || '';
+
+  // 技能
+  var sg = document.getElementById('skills-grid');
+  (data.skills || []).forEach(function (s) {
+    var d = document.createElement('div');
+    d.className = 'skill-item';
+    d.innerHTML =
+      '<div class="skill-name"></div>' +
+      '<div class="skill-bar"><div class="skill-bar-fill"></div></div>' +
+      '<div class="skill-level"></div>';
+    d.querySelector('.skill-name').textContent = s.name;
+    d.querySelector('.skill-bar-fill').style.width = (s.level || 0) + '%';
+    d.querySelector('.skill-level').textContent = (s.level || 0) + '%';
+    sg.appendChild(d);
+  });
+
+  // 项目
+  var pg = document.getElementById('projects-grid');
+  (data.projects || []).forEach(function (p) {
+    var d = document.createElement('div');
+    d.className = 'project-card';
+    var tags = (p.tags || []).map(function (t) {
+      return '<span class="tag"></span>';
+    }).join('');
+    d.innerHTML =
+      '<div class="project-title"></div>' +
+      '<div class="project-desc"></div>' +
+      '<div class="project-tags">' + tags + '</div>' +
+      (p.link ? '<a class="project-link" target="_blank" rel="noopener">查看项目 →</a>' : '');
+    d.querySelector('.project-title').textContent = p.title;
+    d.querySelector('.project-desc').textContent = p.desc;
+    var tagEls = d.querySelectorAll('.tag');
+    (p.tags || []).forEach(function (t, i) { tagEls[i].textContent = t; });
+    if (p.link) d.querySelector('.project-link').href = p.link;
+    pg.appendChild(d);
+  });
+
+  // 联系方式
+  var cg = document.getElementById('contact-grid');
+  (data.contacts || []).forEach(function (c) {
+    var d = document.createElement('a');
+    d.className = 'contact-item';
+    if (c.link) { d.href = c.link; d.target = '_blank'; d.rel = 'noopener'; }
+    d.innerHTML =
+      '<div class="contact-icon"></div>' +
+      '<div><div class="contact-label"></div><div class="contact-value"></div></div>';
+    d.querySelector('.contact-icon').textContent = c.icon || '🔗';
+    d.querySelector('.contact-label').textContent = c.label || '';
+    d.querySelector('.contact-value').textContent = c.value || '';
+    cg.appendChild(d);
+  });
+})();
+</script>
+</body>
+</html>
+</textarea>
+
+<script>
+/* ==================== 默认数据 ==================== */
+const DEFAULT_DATA = {
+  "name": "张三",
+  "avatarText": "张",
+  "avatarUrl": "",
+  "heroBgUrl": "",
+  "role": "前端工程师",
+  "tagline": "热爱构建美好的网页与产品，欢迎了解我的作品。",
+  "about": "你好，我是张三。\n\n一名对技术充满热情的工程师，喜欢把想法变成能用的产品。目前专注于 Web 开发与工具效率方向。\n\n工作之外喜欢摄影、跑步和折腾各种新工具。",
+  "skills": [
+    { "name": "JavaScript", "level": 90 },
+    { "name": "HTML / CSS", "level": 92 },
+    { "name": "Vue", "level": 85 },
+    { "name": "React", "level": 80 },
+    { "name": "Node.js", "level": 75 },
+    { "name": "Python", "level": 70 }
+  ],
+  "projects": [
+    { "title": "个人博客系统", "desc": "从零搭建的静态博客，支持 Markdown 写作与自动部署。", "tags": ["Vue", "Vite"], "link": "https://github.com/" },
+    { "title": "效率工具箱", "desc": "集合了日常常用的小工具，如 JSON 格式化、正则测试等。", "tags": ["React", "TypeScript"], "link": "" },
+    { "title": "数据可视化面板", "desc": "对接多种数据源的可视化仪表盘，支持自定义图表。", "tags": ["ECharts", "Node.js"], "link": "" }
+  ],
+  "contacts": [
+    { "label": "GitHub", "icon": "💻", "value": "github.com/yourname", "link": "https://github.com/yourname" },
+    { "label": "邮箱", "icon": "📮", "value": "hello@example.com", "link": "mailto:hello@example.com" },
+    { "label": "微信", "icon": "💬", "value": "your-wechat-id", "link": "" }
+  ],
+  "footerText": "© 2026 张三 · 用 ❤️ 与代码构建"
+};
+
+const STORE_KEY = 'personal-site-data';
+let data = load();
+
+function load() {
+  try {
+    const saved = localStorage.getItem(STORE_KEY);
+    if (saved) return JSON.parse(saved);
+  } catch (e) {}
+  return JSON.parse(JSON.stringify(DEFAULT_DATA));
+}
+function save() {
+  try { localStorage.setItem(STORE_KEY, JSON.stringify(data)); } catch (e) {}
+}
+
+/* ==================== 导出 HTML ==================== */
+const TEMPLATE = document.getElementById('tpl').value;
+function buildSiteHTML(d) {
+  const json = JSON.stringify(d, null, 2).replace(/<\//g, '<\\/');
+  return TEMPLATE.replace('__SITE_DATA_JSON__', json);
+}
+
+/* ==================== 预览 ==================== */
+const preview = document.getElementById('preview');
+let previewTimer = null;
+function refreshPreview() {
+  clearTimeout(previewTimer);
+  previewTimer = setTimeout(() => {
+    preview.srcdoc = buildSiteHTML(data);
+  }, 300);
+}
+
+/* ==================== 表单绑定 ==================== */
+const textFields = ['name', 'avatarText', 'avatarUrl', 'heroBgUrl', 'role', 'tagline', 'about', 'footerText'];
+function bindFields() {
+  textFields.forEach(k => {
+    const el = document.getElementById('f-' + k);
+    el.value = data[k] || '';
+    el.addEventListener('input', () => { data[k] = el.value; save(); refreshPreview(); });
+  });
+}
+
+/* ==================== 列表渲染 ==================== */
+function el(html) { const t = document.createElement('template'); t.innerHTML = html.trim(); return t.content.firstChild; }
+
+function renderSkills() {
+  const list = document.getElementById('skills-list');
+  list.innerHTML = '';
+  data.skills.forEach((s, i) => {
+    const row = el(`<div class="item-row">
+      <div class="item-head"><span>技能 ${i + 1}</span><button class="btn btn-danger">删除</button></div>
+      <div class="row">
+        <div class="field"><label>名称</label><input type="text" class="s-name"></div>
+        <div class="field" style="max-width:140px"><label>熟练度 <span class="level-val">${s.level}%</span></label>
+          <input type="range" min="0" max="100" class="s-level" style="width:100%"></div>
+      </div>
+    </div>`);
+    row.querySelector('.s-name').value = s.name;
+    row.querySelector('.s-level').value = s.level;
+    row.querySelector('.s-name').addEventListener('input', e => { s.name = e.target.value; save(); refreshPreview(); });
+    row.querySelector('.s-level').addEventListener('input', e => {
+      s.level = +e.target.value;
+      row.querySelector('.level-val').textContent = s.level + '%';
+      save(); refreshPreview();
+    });
+    row.querySelector('.btn-danger').addEventListener('click', () => { data.skills.splice(i, 1); save(); renderSkills(); refreshPreview(); });
+    list.appendChild(row);
+  });
+}
+
+function renderProjects() {
+  const list = document.getElementById('projects-list');
+  list.innerHTML = '';
+  data.projects.forEach((p, i) => {
+    const row = el(`<div class="item-row">
+      <div class="item-head"><span>项目 ${i + 1}</span><button class="btn btn-danger">删除</button></div>
+      <div class="field"><label>标题</label><input type="text" class="p-title"></div>
+      <div class="field"><label>描述</label><textarea class="p-desc" style="min-height:60px"></textarea></div>
+      <div class="row">
+        <div class="field"><label>标签（逗号分隔）</label><input type="text" class="p-tags"></div>
+        <div class="field"><label>链接（可选）</label><input type="text" class="p-link"></div>
+      </div>
+    </div>`);
+    row.querySelector('.p-title').value = p.title;
+    row.querySelector('.p-desc').value = p.desc;
+    row.querySelector('.p-tags').value = (p.tags || []).join(', ');
+    row.querySelector('.p-link').value = p.link || '';
+    row.querySelector('.p-title').addEventListener('input', e => { p.title = e.target.value; save(); refreshPreview(); });
+    row.querySelector('.p-desc').addEventListener('input', e => { p.desc = e.target.value; save(); refreshPreview(); });
+    row.querySelector('.p-tags').addEventListener('input', e => { p.tags = e.target.value.split(/[,，]/).map(t => t.trim()).filter(Boolean); save(); refreshPreview(); });
+    row.querySelector('.p-link').addEventListener('input', e => { p.link = e.target.value; save(); refreshPreview(); });
+    row.querySelector('.btn-danger').addEventListener('click', () => { data.projects.splice(i, 1); save(); renderProjects(); refreshPreview(); });
+    list.appendChild(row);
+  });
+}
+
+function renderContacts() {
+  const list = document.getElementById('contacts-list');
+  list.innerHTML = '';
+  data.contacts.forEach((c, i) => {
+    const row = el(`<div class="item-row">
+      <div class="item-head"><span>联系方式 ${i + 1}</span><button class="btn btn-danger">删除</button></div>
+      <div class="row">
+        <div class="field" style="max-width:110px"><label>图标(emoji)</label><input type="text" class="c-icon"></div>
+        <div class="field"><label>名称</label><input type="text" class="c-label"></div>
+        <div class="field"><label>显示内容</label><input type="text" class="c-value"></div>
+        <div class="field"><label>链接（可选）</label><input type="text" class="c-link"></div>
+      </div>
+    </div>`);
+    row.querySelector('.c-icon').value = c.icon || '';
+    row.querySelector('.c-label').value = c.label || '';
+    row.querySelector('.c-value').value = c.value || '';
+    row.querySelector('.c-link').value = c.link || '';
+    ['icon', 'label', 'value', 'link'].forEach(k => {
+      row.querySelector('.c-' + k).addEventListener('input', e => { c[k] = e.target.value; save(); refreshPreview(); });
+    });
+    row.querySelector('.btn-danger').addEventListener('click', () => { data.contacts.splice(i, 1); save(); renderContacts(); refreshPreview(); });
+    list.appendChild(row);
+  });
+}
+
+/* ==================== 添加按钮 ==================== */
+document.getElementById('add-skill').addEventListener('click', () => {
+  data.skills.push({ name: '新技能', level: 60 }); save(); renderSkills(); refreshPreview();
+});
+document.getElementById('add-project').addEventListener('click', () => {
+  data.projects.push({ title: '新项目', desc: '项目描述', tags: [], link: '' }); save(); renderProjects(); refreshPreview();
+});
+document.getElementById('add-contact').addEventListener('click', () => {
+  data.contacts.push({ label: '联系方式', icon: '🔗', value: '', link: '' }); save(); renderContacts(); refreshPreview();
+});
+
+/* ==================== 工具栏 ==================== */
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2200);
+}
+
+document.getElementById('btn-export').addEventListener('click', () => {
+  const html = buildSiteHTML(data);
+  const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'index.html';
+  a.click();
+  URL.revokeObjectURL(a.href);
+  toast('已导出 index.html —— 用它替换仓库里的 index.html，然后 git push 即可更新线上');
+});
+
+const dlg = document.getElementById('dlg');
+const dlgText = document.getElementById('dlg-text');
+document.getElementById('btn-copy').addEventListener('click', () => {
+  dlgTitle.textContent = '站点 JSON 数据（全选复制）';
+  dlgText.value = JSON.stringify(data, null, 2);
+  dlgText.disabled = true;
+  dlg.showModal();
+  dlgText.select();
+});
+document.getElementById('btn-import').addEventListener('click', () => {
+  dlgTitle.textContent = '粘贴 JSON 导入';
+  dlgText.value = '';
+  dlgText.disabled = false;
+  dlg.showModal();
+});
+document.getElementById('dlg-close').addEventListener('click', () => dlg.close());
+document.getElementById('dlg-apply').addEventListener('click', () => {
+  if (dlgText.disabled) { dlg.close(); return; }
+  try {
+    data = JSON.parse(dlgText.value);
+    save(); bindFields(); renderSkills(); renderProjects(); renderContacts(); refreshPreview();
+    toast('导入成功'); dlg.close();
+  } catch (e) { toast('JSON 格式有误：' + e.message); }
+});
+
+document.getElementById('btn-reset').addEventListener('click', () => {
+  if (!confirm('确定重置为默认内容吗？当前编辑将丢失。')) return;
+  data = JSON.parse(JSON.stringify(DEFAULT_DATA));
+  save(); bindFields(); renderSkills(); renderProjects(); renderContacts(); refreshPreview();
+  toast('已重置');
+});
+
+/* ==================== 初始化 ==================== */
+const dlgTitle = document.getElementById('dlg-title');
+bindFields();
+renderSkills();
+renderProjects();
+renderContacts();
+refreshPreview();
+</script>
+</body>
+</html>
