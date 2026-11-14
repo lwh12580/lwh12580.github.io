@@ -140,6 +140,44 @@
   .contact-label { font-size: 12px; color: var(--text-soft); }
   .contact-value { font-size: 14px; font-weight: 500; word-break: break-all; }
 
+  /* ===== 留言板 ===== */
+  .gb-card {
+    background: var(--card); border-radius: var(--radius);
+    padding: 26px 28px; box-shadow: var(--shadow);
+  }
+  .gb-note {
+    font-size: 13px; color: var(--text-soft); background: #f8f9ff;
+    border: 1px dashed rgba(79,110,247,.35); border-radius: 10px;
+    padding: 10px 14px; margin-bottom: 18px;
+  }
+  .gb-note b { color: var(--primary); }
+  .gb-form { display: flex; flex-direction: column; gap: 12px; }
+  .gb-form input, .gb-form textarea {
+    width: 100%; padding: 10px 14px; border: 1px solid var(--border);
+    border-radius: 10px; font-size: 15px; font-family: inherit;
+    background: #fafbfc; color: var(--text); outline: none;
+    transition: border-color .15s, background .15s;
+  }
+  .gb-form textarea { min-height: 92px; resize: vertical; }
+  .gb-form input:focus, .gb-form textarea:focus { border-color: var(--primary); background: #fff; }
+  .gb-form-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .gb-count { font-size: 12px; color: var(--text-soft); }
+
+  .gb-list { margin-top: 24px; display: flex; flex-direction: column; }
+  .gb-item { display: flex; gap: 12px; padding: 16px 0; border-top: 1px solid var(--border); }
+  .gb-avatar {
+    flex: 0 0 40px; width: 40px; height: 40px; border-radius: 50%;
+    background: linear-gradient(135deg, var(--primary), #8b9cff);
+    color: #fff; font-weight: 600; font-size: 16px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .gb-body { flex: 1; min-width: 0; }
+  .gb-meta { display: flex; align-items: baseline; gap: 10px; }
+  .gb-user { font-weight: 600; font-size: 14px; }
+  .gb-time { font-size: 12px; color: var(--text-soft); }
+  .gb-text { font-size: 15px; color: #374151; margin-top: 4px; white-space: pre-wrap; word-break: break-word; }
+  .gb-empty { text-align: center; color: var(--text-soft); font-size: 14px; padding: 24px 0; }
+
   footer {
     border-top: 1px solid var(--border); padding: 28px 0;
     text-align: center; color: var(--text-soft); font-size: 14px;
@@ -162,6 +200,7 @@
       <a href="#skills">技能</a>
       <a href="#projects">项目</a>
       <a href="#contact">联系</a>
+      <a href="#guestbook">留言</a>
     </div>
   </div>
 </nav>
@@ -204,6 +243,30 @@
       <div class="contact-grid" id="contact-grid"></div>
     </div>
   </section>
+
+  <section id="guestbook">
+    <div class="container">
+      <h2 class="section-title">留言板</h2>
+      <div class="gb-card">
+        <p class="gb-note" id="gb-note"></p>
+        <form class="gb-form" id="gb-form" autocomplete="off">
+          <input type="text" id="gb-name" maxlength="20" placeholder="你的昵称" required>
+          <textarea id="gb-text" maxlength="500" placeholder="说点什么吧，欢迎友善留言…" required></textarea>
+          <div class="gb-form-foot">
+            <span class="gb-count" id="gb-count">0 / 500</span>
+            <button class="btn btn-primary" type="submit">发布留言</button>
+          </div>
+        </form>
+        <div class="gb-list" id="gb-list"></div>
+        <div id="cusdis_thread" style="display:none"
+             data-host="https://cusdis.com"
+             data-app-id=""
+             data-page-id="guestbook"
+             data-page-url=""
+             data-page-title="留言板"></div>
+      </div>
+    </div>
+  </section>
 </main>
 
 <footer>
@@ -215,7 +278,6 @@
   "name": "赖秉权",
   "avatarText": "赖",
   "avatarUrl": "avatar.jpg",
-  "heroBgUrl": "",
   "role": "学生",
   "tagline": "七5班",
   "about": "你好，我是赖秉权",
@@ -233,9 +295,21 @@
       "icon": "囧",
       "value": "taytayswifts",
       "link": ""
+    },
+    {
+      "label": "联系方式",
+      "icon": "💬",
+      "value": "13015609535",
+      "link": ""
     }
   ],
-  "footerText": ""
+  "footerText": "关注一下喵~",
+  "heroBgUrl": "bg.jpg",
+  "guestbook": {
+    "mode": "local",
+    "cusdisAppId": "",
+    "cusdisHost": "https://cusdis.com"
+  }
 }
 </script>
 
@@ -296,6 +370,10 @@
   // 关于我
   document.getElementById('about-text').textContent = data.about || '';
 
+  // 没有内容时隐藏板块
+  if (!(data.skills || []).length) document.getElementById('skills').style.display = 'none';
+  if (!(data.projects || []).length) document.getElementById('projects').style.display = 'none';
+
   // 技能
   var sg = document.getElementById('skills-grid');
   (data.skills || []).forEach(function (s) {
@@ -346,6 +424,102 @@
     d.querySelector('.contact-value').textContent = c.value || '';
     cg.appendChild(d);
   });
+
+  /* ============ 留言板 ============ */
+  (function initGuestbook() {
+    var cfg = data.guestbook || { mode: 'local' };
+    var form = document.getElementById('gb-form');
+    var listEl = document.getElementById('gb-list');
+    var noteEl = document.getElementById('gb-note');
+    var nameEl = document.getElementById('gb-name');
+    var textEl = document.getElementById('gb-text');
+    var countEl = document.getElementById('gb-count');
+    var threadEl = document.getElementById('cusdis_thread');
+    var KEY = 'guestbook-' + (data.name || 'site');
+
+    textEl.addEventListener('input', function () {
+      countEl.textContent = textEl.value.length + ' / 500';
+    });
+
+    // 共享模式：Cusdis（匿名留言，所有访客可见，需填 app id）
+    if (cfg.mode === 'cusdis' && cfg.cusdisAppId) {
+      noteEl.style.display = 'none';
+      form.style.display = 'none';
+      listEl.style.display = 'none';
+      threadEl.style.display = 'block';
+      threadEl.setAttribute('data-app-id', cfg.cusdisAppId);
+      var host = cfg.cusdisHost || 'https://cusdis.com';
+      threadEl.setAttribute('data-host', host);
+      threadEl.setAttribute('data-page-url', location.href.split('#')[0]);
+      var s = document.createElement('script');
+      s.src = host + '/js/cusdis.es.js';
+      s.async = true; s.defer = true;
+      document.body.appendChild(s);
+      return;
+    }
+
+    // 本地模式（默认）：留言保存在当前浏览器
+    noteEl.innerHTML = '当前是 <b>本地留言模式</b>：留言只保存在你自己的浏览器里。想让所有访客都能留言，见 README「开启真实留言」。';
+
+    function load() {
+      try { return JSON.parse(localStorage.getItem(KEY) || '[]'); } catch (e) { return []; }
+    }
+    function save(arr) {
+      try { localStorage.setItem(KEY, JSON.stringify(arr)); } catch (e) {}
+    }
+    function timeAgo(t) {
+      var d = Date.now() - t;
+      if (d < 60e3) return '刚刚';
+      if (d < 3600e3) return Math.floor(d / 60e3) + ' 分钟前';
+      if (d < 86400e3) return Math.floor(d / 3600e3) + ' 小时前';
+      if (d < 86400e3 * 30) return Math.floor(d / 86400e3) + ' 天前';
+      var x = new Date(t);
+      return x.getFullYear() + '-' + (x.getMonth() + 1) + '-' + x.getDate();
+    }
+    function render() {
+      var arr = load().sort(function (a, b) { return b.time - a.time; });
+      listEl.innerHTML = '';
+      if (!arr.length) {
+        var e = document.createElement('div');
+        e.className = 'gb-empty';
+        e.textContent = '还没有留言，来做第一个留言的人吧 ~';
+        listEl.appendChild(e);
+        return;
+      }
+      arr.forEach(function (m) {
+        var item = document.createElement('div');
+        item.className = 'gb-item';
+        item.innerHTML = '<div class="gb-avatar"></div><div class="gb-body">' +
+          '<div class="gb-meta"><span class="gb-user"></span><span class="gb-time"></span></div>' +
+          '<div class="gb-text"></div></div>';
+        item.querySelector('.gb-avatar').textContent = (m.name || '匿').charAt(0);
+        item.querySelector('.gb-user').textContent = m.name || '匿名';
+        item.querySelector('.gb-time').textContent = timeAgo(m.time);
+        item.querySelector('.gb-text').textContent = m.text;
+        listEl.appendChild(item);
+      });
+    }
+
+    form.addEventListener('submit', function (ev) {
+      ev.preventDefault();
+      var name = (nameEl.value || '').trim();
+      var text = (textEl.value || '').trim();
+      if (!name || !text) return;
+      var arr = load();
+      arr.push({ name: name.slice(0, 20), text: text.slice(0, 500), time: Date.now() });
+      save(arr);
+      try { localStorage.setItem(KEY + '-name', name); } catch (e) {}
+      textEl.value = '';
+      countEl.textContent = '0 / 500';
+      render();
+    });
+
+    try {
+      var savedName = localStorage.getItem(KEY + '-name');
+      if (savedName) nameEl.value = savedName;
+    } catch (e) {}
+    render();
+  })();
 })();
 </script>
 </body>
